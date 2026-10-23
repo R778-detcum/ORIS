@@ -215,7 +215,6 @@ class MainWindow(QMainWindow):
         words = text.split()
         self.char_cnt_label.setText(f"Название: {len(words)} слов")
 
-    # --- ДОПОЛНИТЕЛЬНО: JSON ---
     def save_tasks(self):
         with open(self.json_file, "w", encoding="utf-8") as file:
             json.dump(self.tasks, file, ensure_ascii=False, indent=4)
