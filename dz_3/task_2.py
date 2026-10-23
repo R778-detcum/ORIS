@@ -3,30 +3,28 @@ import json
 import os
 from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, QLabel,
                              QLineEdit, QTextEdit, QHBoxLayout, QCheckBox, QPushButton,
-                             QComboBox, QListWidget, QListWidgetItem, QMessageBox)
+                             QComboBox, QListWidget, QListWidgetItem, QMessageBox, QInputDialog)
+from PyQt6.QtCore import Qt
+
+TASKS_FILE = os.path.join(os.path.dirname(__file__), 'tasks.json')
 
 
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.tasks = []
-        self.tasks_cnt = 0
-        self.json_file = "tasks.json"
 
         self.counter_label = QLabel("Created tasks: 0")
-
         self.setWindowTitle("To-Do List")
-        self.resize(400, 600)
+        self.resize(450, 650)
 
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
-
         self.vbox = QVBoxLayout()
         central_widget.setLayout(self.vbox)
 
         self.label_task = QLabel("Task")
         self.line_edit_task = QLineEdit()
-
         self.char_cnt_label = QLabel("Название: 0 символов")
 
         self.label_description = QLabel("Description")
@@ -48,23 +46,22 @@ class MainWindow(QMainWindow):
 
         self.button_layout = QHBoxLayout()
         self.button_create = QPushButton("Create task")
-        self.button_remove = QPushButton("Delete last task")
+        self.button_remove = QPushButton("Delete last")
         self.button_clear = QPushButton("Clear form")
         self.button_clear_list = QPushButton("Clear list")
-
         self.button_about = QPushButton("About")
+        self.button_edit = QPushButton("Edit task")
 
         self.button_layout.addWidget(self.button_create)
         self.button_layout.addWidget(self.button_remove)
         self.button_layout.addWidget(self.button_clear)
         self.button_layout.addWidget(self.button_clear_list)
         self.button_layout.addWidget(self.button_about)
+        self.button_layout.addWidget(self.button_edit)
 
         self.filter_task = QComboBox()
         self.filter_task.addItems(["All", "Low", "Medium", "High"])
-
         self.status_task = QLabel("status: ready")
-
         self.task_list = QListWidget()
 
         self.vbox.addWidget(self.label_task)
@@ -86,82 +83,87 @@ class MainWindow(QMainWindow):
         self.button_clear.clicked.connect(self.clear_form)
         self.line_edit_task.textChanged.connect(self.title_changed)
         self.button_clear_list.clicked.connect(self.clear_list)
-        self.button_about.clicked.connect(self.show_about)  # Подключаем About
+        self.button_about.clicked.connect(self.show_about)
+        self.button_edit.clicked.connect(self.edit_task)
 
         self.setStyleSheet("""
         QMainWindow { background-color: #4169E1; }
         QLabel { color: white; }
-        QPushButton {
-            background-color: #FFFAFA; 
-            color: #191970; 
-            padding: 4px;
-        }
-
+        QPushButton { background-color: #FFFAFA; color: #191970; padding: 6px; }
         QPushButton:hover { background-color: #E0FFFF; }
-
         QPushButton:disabled { background-color: #A9A9A9; color: #696969; }
-
-        QLineEdit { background-color: #E0FFFF; color: #191970; }
-        QTextEdit { background-color: #E0FFFF; color: #191970; }
-        QListWidget { background-color: #E0FFFF; color: #191970; }
-        QComboBox { background-color: #FFFAFA; color: #191970; }
+        QLineEdit, QTextEdit, QListWidget, QComboBox { background-color: #E0FFFF; color: #191970; }
         """)
 
         self.load_tasks()
 
     def create_task(self):
         line = self.line_edit_task.text().strip()
-
         if not line:
-            QMessageBox.warning(self, "Ошибка валидации", "Название задачи не должно быть пустым")
+            QMessageBox.warning(self, "Ошибка", "Название задачи не должно быть пустым")
             return
 
-        text = self.line_edit_description.toPlainText()
-        priority = self.priority_combo.currentText()  # Берем из ComboBox (Пункт А)
-
-        important_cb = "Yes" if self.check_box_1.isChecked() else "No"
-        send_cb = "Yes" if self.check_box_2.isChecked() else "No"
+        task_id = max([t["id"] for t in self.tasks], default=0) + 1
 
         task_data = {
+            "id": task_id,
             "task": line,
-            "description": text,
-            "priority": priority,
-            "important": important_cb,
-            "send": send_cb,
+            "description": self.line_edit_description.toPlainText(),
+            "priority": self.priority_combo.currentText(),
+            "important": "Yes" if self.check_box_1.isChecked() else "No",
+            "send": "Yes" if self.check_box_2.isChecked() else "No",
         }
 
         self.tasks.append(task_data)
-        self.tasks_cnt += 1
-
         self.save_tasks()
         self.update_tasks()
-        self.counter_label.setText(f"Created tasks: {self.tasks_cnt}")
         self.clear_form()
         self.status_task.setText("Задача создана")
 
-    def delete_task(self):
-        if not self.tasks:
-            self.status_task.setText("Задач: 0")
+    def edit_task(self):
+        current_item = self.task_list.currentItem()
+
+        if not current_item:
+            QMessageBox.warning(self, "Внимание", "Сначала кликните на задачу в списке, чтобы выделить её!")
             return
 
-        self.tasks.pop()
-        self.tasks_cnt -= 1
+        task_id = current_item.data(Qt.ItemDataRole.UserRole)
 
+        task_to_edit = None
+        for task in self.tasks:
+            if task["id"] == task_id:
+                task_to_edit = task
+                break
+
+        if not task_to_edit:
+            return
+
+        new_name, ok = QInputDialog.getText(self, "Редактирование", "Новое название:", text=task_to_edit["task"])
+
+        if ok and new_name.strip():
+            task_to_edit["task"] = new_name.strip()
+
+            self.save_tasks()
+            self.update_tasks()
+
+
+            QMessageBox.information(self, "Успех", "Задача успешно изменена и сохранена!")
+            self.status_task.setText("Status: Task edited")
+
+    def delete_task(self):
+        if not self.tasks:
+            return
+        self.tasks.pop()
         self.save_tasks()
         self.update_tasks()
-        self.counter_label.setText(f"Created tasks: {self.tasks_cnt}")
         self.status_task.setText("Status: Task deleted")
-
-    def show_about(self):
-        QMessageBox.about(
-            self, "О программе",
-            "To-Do List v2.0\n\nПрограмма для управления задачами.\n\nВыполнила: студентка ОРИС"
-        )
 
     def update_tasks(self):
         self.task_list.clear()
-
         self.button_remove.setEnabled(len(self.tasks) > 0)
+        self.button_edit.setEnabled(len(self.tasks) > 0)
+
+        self.counter_label.setText(f"Created tasks: {len(self.tasks)}")
 
         if not self.tasks:
             self.task_list.addItem("Задач пока нет...")
@@ -169,21 +171,23 @@ class MainWindow(QMainWindow):
             return
 
         curr_task = self.filter_task.currentText()
-
-        if curr_task == "All":
-            filter_tasks = self.tasks
-        else:
-            filter_tasks = [task for task in self.tasks if task['priority'] == curr_task]
+        filter_tasks = self.tasks if curr_task == "All" else [t for t in self.tasks if t['priority'] == curr_task]
 
         if not filter_tasks:
-            self.status_task.setText("No task")
+            self.status_task.setText("Нет задач с таким приоритетом")
             return
 
         for i, task in enumerate(filter_tasks, start=1):
-            decs = task["description"] if "description" in task else ""
-            item = QListWidgetItem(
-                f'№{i}. {task["task"]} - {task["priority"]} \nОписание: {decs} \nВажная: {task["important"]}\nУведомление: {task["send"]}')
+            decs = task["description"]
+            item_text = f'№{i}. {task["task"]} - {task["priority"]} \nОписание: {decs} \nВажная: {task["important"]}\nУведомление: {task["send"]}'
+            item = QListWidgetItem(item_text)
+
+            item.setData(Qt.ItemDataRole.UserRole, task["id"])
+
             self.task_list.addItem(item)
+
+    def show_about(self):
+        QMessageBox.about(self, "О программе", "To-Do List v2.0\n\nВыполнила: студентка ОРИС")
 
     def clear_form(self):
         self.line_edit_task.clear()
@@ -191,45 +195,36 @@ class MainWindow(QMainWindow):
         self.priority_combo.setCurrentText("Medium")
         self.check_box_1.setChecked(False)
         self.check_box_2.setChecked(False)
-        self.status_task.setText("Status: Task cleared")
 
     def clear_list(self):
         if not self.tasks:
             QMessageBox.warning(self, "Внимание", "Список задач и так пуст")
             return
 
-        reply = QMessageBox.question(self, "Подтверждение", "Хотите удалить все задачи?",
+        reply = QMessageBox.question(self, "Подтверждение", "Удалить все задачи?",
                                      QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
-
         if reply == QMessageBox.StandardButton.Yes:
             self.tasks.clear()
-            self.tasks_cnt = 0
             self.save_tasks()
             self.update_tasks()
-            self.counter_label.setText(f"Created tasks: {self.tasks_cnt}")
-            self.status_task.setText("Status: Task cleared")
-        else:
-            self.status_task.setText("Отмена очистки")
+            self.status_task.setText("Status: List cleared")
 
     def title_changed(self, text):
-        words = text.split()
-        self.char_cnt_label.setText(f"Название: {len(words)} слов")
+        self.char_cnt_label.setText(f"Название: {len(text.split())} слов")
 
     def save_tasks(self):
-        with open(self.json_file, "w", encoding="utf-8") as file:
+        with open(TASKS_FILE, "w", encoding="utf-8") as file:
             json.dump(self.tasks, file, ensure_ascii=False, indent=4)
 
     def load_tasks(self):
-        if os.path.exists(self.json_file):
-            with open(self.json_file, "r", encoding="utf-8") as file:
+        if os.path.exists(TASKS_FILE):
+            with open(TASKS_FILE, "r", encoding="utf-8") as file:
                 self.tasks = json.load(file)
-                self.tasks_cnt = len(self.tasks)
-                self.counter_label.setText(f"Created tasks: {self.tasks_cnt}")
                 self.update_tasks()
 
 
 if __name__ == "__main__":
-    app1 = QApplication(sys.argv)
+    app = QApplication(sys.argv)
     window = MainWindow()
     window.show()
-    sys.exit(app1.exec())
+    sys.exit(app.exec())
